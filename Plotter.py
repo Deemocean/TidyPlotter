@@ -13,10 +13,10 @@ import math
 
 offset = 3.2625
 
-max_height = 12 #maximum hieght drawing in cm
-max_width = 12 #maximum width of drawing in cm
+max_height = 12-offset #maximum hieght drawing in cm
+max_width = 12-offset #maximum width of drawing in cm
 
-img = cv2.imread('imgs/face.png', cv2.IMREAD_GRAYSCALE)
+img = cv2.imread('imgs/dog.png', cv2.IMREAD_GRAYSCALE)
 edges = cv2.Canny(img,100,200)
 height, width = edges.shape
 height = float(height)
@@ -63,8 +63,8 @@ coordinates = [[x, y] for x, y in zip(x_coords, y_coords)]
 
 #print(coordinates)
 
-l1 = 11.5 #length of first arm
-l2 = 13 #length of second arm
+l1 = 10 #length of first arm
+l2 = 12 #length of second arm
 
 #define GPIO pins
 GPIO_pins = (-1, -1, -1) # Microstep Resolution MS1-MS3 -> GPIO Pin
@@ -94,15 +94,19 @@ class Arm:
     angle_diff = np.abs(angle-self.angle)
     # step = int(angle_diff*200/360)
 
-    step = int(angle_diff*200/360)*4
+    step = int((angle_diff*200*16/360))
 
     if(self.angle>=angle):
-      self.motor.motor_go(True, "1/4" , step, 0.01, False, .05)
+      self.motor.motor_go(True, "1/16" , step, 0.01, False, .05)
+      self.angle-=step*(360/(200*16))
 
     else :
-      self.motor.motor_go(False, "1/4" , step, 0.01,False, .05)
+      self.motor.motor_go(False, "1/16" , step, 0.01,False, .05)
+      self.angle+=step*(360/(200*16))
 
-    self.angle=angle
+    # self.angle=angle
+
+
 
 
 # def anglecalc(x, y):
@@ -200,7 +204,7 @@ def draw_array(arr, arm1, arm2):
     print("drawing point #:"+str(i))
     to_point(arr[i][0],arr[i][1])
 
-    time.sleep(0.5)
+    time.sleep(0.3)
 
     pen_touch(True)
     pen_touch(False)
@@ -234,25 +238,31 @@ def factor_arrary(array,x_f, y_f):
 #LINE DEMO
 
 line_array = []
-# for i in range(20):
-#   line_array.append([10+offset,5+i*(5/10)])
+for i in range(10):
+  line_array.append([5+offset,2+i])
 
-line_array = [[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7]]
+# line_array = [[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7]]
+
+# line_array  =[[offset,offset],[offset,10],[10,offset],[10,10]]
+
 
 # draw_array(line_array,arm1,arm2)
 
+
+
+
 #CIRCLE DEMO
 
-circle  = np.array(make_circle(4,8+offset,5+offset,30))
+circle  = np.array(make_circle(4,8+offset,5+offset,20))
 
-circle = factor_arrary(circle,0.85,1)
+# circle = factor_arrary(circle,0.85,1)
 # draw_array(circle,arm1, arm2)
 
 
 # RECTANGLE DEMO
-rect = draw_array(make_rectangle(6,6,offset+2,offset+2,10), arm1, arm2)
+rect = make_rectangle(5,5,offset+3,offset+2,5)
 
-draw_array(rect,arm1,arm2)
+# draw_array(rect,arm1,arm2)
 
 # IMG
 sample_arr=[]
@@ -265,8 +275,8 @@ for i in range(np.array(coordinates).shape[0]):
 print(sample_arr)
 sample_arr= np.array(sample_arr)
 
-factor_arrary(sample_arr,0.85,1)
-# draw_array(sample_arr, arm1, arm2)
+# factor_arrary(sample_arr,0.85,1)
+draw_array(sample_arr, arm1, arm2)
 
 
 

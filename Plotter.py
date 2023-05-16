@@ -7,31 +7,56 @@ import cv2
 import math
 
 
+l1 = 10 #length of first arm
+l2 = 11 #length of second arm
+
+#define GPIO pins
+GPIO_pins = (-1, -1, -1) # Microstep Resolution MS1-MS3 -> GPIO Pin
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(18, GPIO.OUT)
+
+lift=GPIO.PWM(18, 50)
+lift.start(0)
+
+direction1= 21       # Direction -> GPIO Pin
+step1= 20       # Direction -> GPIO Pin
+
+step2 = 24      # Step -> GPIO Pin
+direction2= 23       # Direction -> GPIO Pin
+
+###BUTTONS####
+pause_pin = 17
+paused = False
+
+def button_cb(channel):
+  global paused
+  if(paused):
+    print("cont...")
+    paused=False
+  else:
+    print("paused")
+    paused=True
 
 
-
-
-offset = 3.2625
-
-max_height = 12-offset #maximum hieght drawing in cm
-max_width = 12-offset #maximum width of drawing in cm
-
-img = cv2.imread('imgs/dog.png', cv2.IMREAD_GRAYSCALE)
+GPIO.setup(pause_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+GPIO.add_event_detect(pause_pin, GPIO.FALLING, callback = button_cb, bouncetime=300)
+##############
+offset = 3.2625+1.6
+img = cv2.imread('imgs/mona.jpeg', cv2.IMREAD_GRAYSCALE)
 edges = cv2.Canny(img,100,200)
 height, width = edges.shape
 height = float(height)
 width = float(width)
 contours, hierarchy = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-normalizing_factor = 0.0
-scaling_factor = 0.0
 
-if height >= width:
-    normalizing_factor = height
-    scaling_factor = max_height
-else:
-    normalizing_factor = width
-    scaling_factor = max_width
+
+max_r = 15
+
+input_r = np.sqrt(height**2+width**2)
+
+scale_factor = max_r/input_r
+
 
 #converts the points stored in contours from ints to floats
 contours_float = []
@@ -41,13 +66,8 @@ for contour in contours:
 
 #normalizes all points with respect to width and height of the image
 for contour in contours_float:
-    contour[:, :, 0] /= normalizing_factor
-    contour[:, :, 1] /= normalizing_factor
-
-#rescales points to fit page size (10 was just used for debugging)
-for contour in contours_float:
-    contour[:, :, 0] *= scaling_factor
-    contour[:, :, 1] *= scaling_factor
+    contour[:, :, 0] *= scale_factor
+    contour[:, :, 1] *= scale_factor
 
 # Get x and y coordinates of contour points
 x_coords = []
@@ -61,36 +81,13 @@ for contour in contours_float:
 
 coordinates = [[x, y] for x, y in zip(x_coords, y_coords)]
 
-#print(coordinates)
-
-l1 = 10 #length of first arm
-l2 = 12 #length of second arm
-
-#define GPIO pins
-GPIO_pins = (-1, -1, -1) # Microstep Resolution MS1-MS3 -> GPIO Pin
-GPIO.setmode(GPIO.BCM)
-GPIO.setup(18, GPIO.OUT)
-
-
-
-lift=GPIO.PWM(18, 50)
-lift.start(0)
-
-direction1= 21       # Direction -> GPIO Pin
-step1= 20       # Direction -> GPIO Pin
-
-step2 = 24      # Step -> GPIO Pin
-direction2= 23       # Direction -> GPIO Pin
-
-
-
-
 class Arm:
   def __init__(self,angle, motor):
     self.angle = angle
     self.motor = motor
-  
+
   def to_angle(self, angle):
+
     angle_diff = np.abs(angle-self.angle)
     # step = int(angle_diff*200/360)
 
@@ -104,39 +101,7 @@ class Arm:
       self.motor.motor_go(False, "1/16" , step, 0.01,False, .05)
       self.angle+=step*(360/(200*16))
 
-    # self.angle=angle
 
-
-
-
-# def anglecalc(x, y):
-
-#   link1_length =l1
-#   link2_length = l2
-#   # Find the distance from the origin to the target point
-#   distance = math.sqrt(x**2 + y**2)
-
-#   # Find the angle between the x-axis and the line connecting the origin to the target point
-#   theta1 = math.atan2(y, x)
-
-#   # Find the angle between the two links using the law of cosines
-#   cos_theta2 = (link1_length**2 + link2_length**2 - distance**2) / (2 * link1_length * link2_length)
-#   sin_theta2 = math.sqrt(1 - cos_theta2**2)
-#   theta2 = math.atan2(sin_theta2, cos_theta2)
-
-#   # Find the angle between the x-axis and the first link using the law of cosines
-#   cos_theta3 = (link1_length**2 + distance**2 - link2_length**2) / (2 * link1_length * distance)
-#   sin_theta3 = math.sqrt(1 - cos_theta3**2)
-#   theta3 = math.atan2(sin_theta3, cos_theta3)
-
-#   print("angle1: "+str(math.degrees(theta1)))
-#   print("angle2: "+str(180-math.degrees(theta2 + theta3)))
-#   print("x: "+str(x))
-#   print("y: "+str(y))
-#   print("------------------------------------")
-
-#   # Convert the angles to degrees and return them
-#   return math.degrees(theta1), (180-math.degrees(theta2 + theta3))
 
 def anglecalc(x,y):
     theta2 = np.arccos(((x**2 + y**2 - l1**2 -l2**2)/(2*l1*l2)))
@@ -145,6 +110,9 @@ def anglecalc(x,y):
         theta1 = np.pi/2 - np.arctan((l2*np.sin(theta2))/(l1 + l2 * np.cos(theta2)))
     else:
         theta1 = np.arctan(y/x) - np.arctan((l2*np.sin(theta2))/(l1 + l2 * np.cos(theta2)))
+
+    if(theta1>np.pi/2):
+      theta1 =  theta1 - np.pi
 
     print("angle1: "+str(theta1*180/np.pi))
     print("angle2: "+str(theta2*180/np.pi))
@@ -184,22 +152,11 @@ def to_point(x,y):
     move_both_arm(angle1,angle2)
 
 def draw_array(arr, arm1, arm2):
-  # for i in range(len(arr)):
-  #   if i % 10 ==0 :
-  #     print("Cali")
-  #     time.sleep(5)
-  #     arm1.angle=0
-  #     arm2.angle=0
-  #     print("Cali-done, cont...")
+  global pasued
 
   for i in range(len(arr)):
-
-    # if(i%5==0):
-    #   to_point(8,8)
-    #   time.sleep(0.5)
-    #   pen_touch(True)
-    #   pen_touch(False)
-    #   pen_touch(False)
+    while(paused):
+      time.sleep(0.5)
 
     print("drawing point #:"+str(i))
     to_point(arr[i][0],arr[i][1])
@@ -238,10 +195,10 @@ def factor_arrary(array,x_f, y_f):
 #LINE DEMO
 
 line_array = []
-for i in range(10):
+for i in range(50):
   line_array.append([5+offset,2+i])
 
-# line_array = [[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7]]
+line_array = [[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7],[10,5],[10,10],[7,7]]
 
 # line_array  =[[offset,offset],[offset,10],[10,offset],[10,10]]
 
@@ -265,18 +222,17 @@ rect = make_rectangle(5,5,offset+3,offset+2,5)
 # draw_array(rect,arm1,arm2)
 
 # IMG
-sample_arr=[]
+img_arr=[]
 ## DOWNSAMPLE
 for i in range(np.array(coordinates).shape[0]):
-  if i % 30 ==0:
+  if i % 100 ==0:
     offsetted  = [coordinates[i][0]+offset,coordinates[i][1]+offset]
-    sample_arr.append(offsetted)
+    img_arr.append(offsetted)
 
-print(sample_arr)
-sample_arr= np.array(sample_arr)
 
-# factor_arrary(sample_arr,0.85,1)
-draw_array(sample_arr, arm1, arm2)
+print(img_arr)
+img_arr= np.array(img_arr)
+draw_array(img_arr, arm1, arm2)
 
 
 
